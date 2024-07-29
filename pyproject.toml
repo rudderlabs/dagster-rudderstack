@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dagster_rudderstack"
+version = "1.0.0"
+dependencies = [
+    "dagster",
+    "pydantic",
+    "pytest",
+    "requests",
+    "responses",
+    "setuptools"
+]
+
+[tool.dagster]
+module_name = "dagster_rudderstack"
