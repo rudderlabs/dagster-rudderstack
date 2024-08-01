@@ -9,6 +9,8 @@ from pydantic import Field
 from typing import Any, Dict, Mapping, Optional
 from urllib.parse import urljoin
 
+from rudder_dagster.types import RudderStackRetlOutput
+
 
 class RETLSyncStatus:
     RUNNING = "running"
@@ -24,7 +26,7 @@ class RETLSyncType:
 DEFAULT_POLL_INTERVAL_SECONDS = 10
 DEFAULT_REQUEST_MAX_RETRIES = 3
 DEFAULT_RETRY_DELAY = 1
-DEFAULT_REQUEST_TIMEOUT = 15
+DEFAULT_REQUEST_TIMEOUT = 30
 DEFAULT_RUDDERSTACK_API_ENDPOINT = "https://api.rudderstack.com"
 
 
@@ -153,12 +155,14 @@ class RudderStackRETLResource(BaseRudderStackResource):
             data={"syncType": sync_type},
         )["syncId"]
 
-    def poll_sync(self, conn_id: str, sync_id: str):
+    def poll_sync(self, conn_id: str, sync_id: str) -> Dict[str, Any]:
         """Polls for completion of a sync.
 
         Args:
             conn_id (str): connetionId for an RETL sync.
             sync_type (str): (optional) full or incremental. Default is incremental.
+        Returns:
+            Dict[str, Any]: Parsed json output from syncs endpoint.
         """
         status_endpoint = f"/v2/retl-connections/{conn_id}/syncs/{sync_id}"
         while True:
@@ -171,7 +175,7 @@ class RudderStackRETLResource(BaseRudderStackResource):
                 self._log.info(
                     f"Sync finished for retl connection: {conn_id}, syncId: {sync_id}"
                 )
-                break
+                return resp
             elif sync_status == RETLSyncStatus.FAILED:
                 error_msg = resp.get("error", None)
                 raise Failure(
@@ -179,13 +183,18 @@ class RudderStackRETLResource(BaseRudderStackResource):
                 )
             time.sleep(self.sync_poll_interval)
 
-    def start_and_poll(self, conn_id: str, sync_type: str = RETLSyncType.INCREMENTAL):
+    def start_and_poll(
+        self, conn_id: str, sync_type: str = RETLSyncType.INCREMENTAL
+    ) -> RudderStackRetlOutput:
         """Triggers a sync and keeps polling till it completes.
 
         Args:
             conn_id (str): connetionId for an RETL sync.
             sync_type (str): (optional) full or incremental. Default is incremental.
+        Returns:
+            RudderStackRetlOutput: Details of the sync run.
         """
         self._log.info(f"Tigger sync for connectionId: {conn_id} and wait for finish")
         sync_id = self.start_sync(conn_id, sync_type)
-        self.poll_sync(conn_id, sync_id)
+        sync_run_details = self.poll_sync(conn_id, sync_id)
+        return RudderStackRetlOutput(sync_run_details)

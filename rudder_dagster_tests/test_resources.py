@@ -7,6 +7,8 @@ from rudder_dagster.resources.rudderstack import (
 )
 from dagster import Failure
 
+from rudder_dagster.types import RudderStackRetlOutput
+
 
 @pytest.fixture
 def mock_retl_resource():
@@ -62,13 +64,22 @@ def test_start_sync(mock_request, mock_retl_resource):
 @patch("requests.request")
 def test_poll_sync(mock_request, mock_retl_resource):
     mock_request.side_effect = [
-        MagicMock(status_code=200, json=lambda: {"status": RETLSyncStatus.RUNNING}),
-        MagicMock(status_code=200, json=lambda: {"status": RETLSyncStatus.SUCCEEDED}),
+        MagicMock(
+            status_code=200,
+            json=lambda: {"id": "test_sync_run_id", "status": RETLSyncStatus.RUNNING},
+        ),
+        MagicMock(
+            status_code=200,
+            json=lambda: {"id": "test_sync_run_id", "status": RETLSyncStatus.SUCCEEDED},
+        ),
     ]
 
-    mock_retl_resource.poll_sync(conn_id="test_conn_id", sync_id="test_sync_id")
+    result = mock_retl_resource.poll_sync(
+        conn_id="test_conn_id", sync_id="test_sync_run_id"
+    )
 
     assert mock_request.call_count == 2
+    assert result == {"id": "test_sync_run_id", "status": RETLSyncStatus.SUCCEEDED}
 
 
 @patch("requests.request")
@@ -91,14 +102,23 @@ def test_poll_sync_failure(mock_request, mock_retl_resource):
 @patch("requests.request")
 def test_start_and_poll(mock_request, mock_retl_resource):
     mock_request.side_effect = [
-        MagicMock(status_code=200, json=lambda: {"syncId": "test_sync_id"}),
-        MagicMock(status_code=200, json=lambda: {"status": RETLSyncStatus.RUNNING}),
-        MagicMock(status_code=200, json=lambda: {"status": RETLSyncStatus.SUCCEEDED}),
+        MagicMock(status_code=200, json=lambda: {"syncId": "test_sync_run_id"}),
+        MagicMock(
+            status_code=200,
+            json=lambda: {"id": "test_sync_run_id", "status": RETLSyncStatus.RUNNING},
+        ),
+        MagicMock(
+            status_code=200,
+            json=lambda: {"id": "test_sync_run_id", "status": RETLSyncStatus.SUCCEEDED},
+        ),
     ]
 
-    mock_retl_resource.start_and_poll(conn_id="test_conn_id")
+    result = mock_retl_resource.start_and_poll(conn_id="test_conn_id")
 
     assert mock_request.call_count == 3
+    assert result == RudderStackRetlOutput(
+        {"id": "test_sync_run_id", "status": RETLSyncStatus.SUCCEEDED}
+    )
 
 
 if __name__ == "__main__":
