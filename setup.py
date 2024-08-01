@@ -8,4 +8,6 @@ setup(
         "dagster-cloud",
     ],
     extras_require={"dev": ["dagster-webserver", "pytest"]},
+    long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
 )
