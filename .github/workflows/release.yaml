@@ -1,8 +1,5 @@
 name: Publish to PyPI 
 on:
-  push:
-    branches:
-      - chore.pypi-setup
   release:
     types: [created]
 jobs:
@@ -34,7 +31,7 @@ jobs:
       - build
     runs-on: ubuntu-latest
     environment:
-      name: test-pypi
+      name: pypi
     permissions:
       id-token: write
     steps:
@@ -45,5 +42,3 @@ jobs:
           path: dist/
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1 
-        with:
-          repository-url: https://test.pypi.org/legacy/
