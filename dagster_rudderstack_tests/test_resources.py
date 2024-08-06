@@ -15,7 +15,7 @@ def mock_retl_resource():
     return RudderStackRETLResource(
         access_token="test_access_token",
         rs_cloud_url="https://testapi.rudderstack.com",
-        sync_poll_interval=1,
+        poll_interval=0.1,
     )
 
 
@@ -81,6 +81,20 @@ def test_poll_sync(mock_request, mock_retl_resource):
     assert mock_request.call_count == 2
     assert result == {"id": "test_sync_run_id", "status": RETLSyncStatus.SUCCEEDED}
 
+@patch("requests.request")
+def test_poll_sync_timeout(mock_request):
+        mock_retl_resource_with_timeout = RudderStackRETLResource(
+            access_token="test_access_token",
+            rs_cloud_url="https://testapi.rudderstack.com",
+            poll_interval=0.1,
+            poll_timeout=0.3,
+        )
+        mock_request.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"id": "test_sync_run_id", "status": RETLSyncStatus.RUNNING})
+
+        with pytest.raises(Failure):
+            mock_retl_resource_with_timeout.poll_sync(conn_id="test_conn_id", sync_id="test_sync_run_id")
 
 @patch("requests.request")
 def test_poll_sync_failure(mock_request, mock_retl_resource):

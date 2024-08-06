@@ -1,7 +1,7 @@
 import pytest
 import responses
 from unittest.mock import MagicMock
-from dagster import build_op_context, ResourceDefinition, op
+from dagster import Failure, build_op_context, ResourceDefinition, op
 from dagster import job, RunConfig, Definitions
 from dagster_rudderstack.ops.retl import rudderstack_sync_op, RudderStackRETLOpConfig
 from dagster_rudderstack.resources.rudderstack import (
@@ -45,7 +45,7 @@ def test_rudderstack_sync_job(mock_config):
             "retl_resource": RudderStackRETLResource(
                 access_token="test_access_token",
                 rs_cloud_url="https://testapi.rudderstack.com",
-                sync_poll_interval=1,
+                poll_interval=0.1,
             )
         },
     )
@@ -86,6 +86,58 @@ def test_rudderstack_sync_job(mock_config):
                 "status": RETLSyncStatus.SUCCEEDED,
             }
         )
+
+def test_rudderstack_sync_job_timeout(mock_config):
+    
+    @job
+    def rs_retl_test_sync_start_and_poll_job():
+        rudderstack_sync_op()
+
+    defs = Definitions(
+        jobs=[rs_retl_test_sync_start_and_poll_job],
+        resources={
+            "retl_resource": RudderStackRETLResource(
+                access_token="test_access_token",
+                rs_cloud_url="https://testapi.rudderstack.com",
+                poll_interval=0.1,
+                poll_timeout=0.2,
+            )
+        },
+    )
+
+    api_prefix = (
+        "https://testapi.rudderstack.com/v2/retl-connections/test_connection_id/"
+    )
+
+    with responses.RequestsMock() as rsps:
+        rsps.add(
+            rsps.POST,
+            api_prefix + "start",
+            json={"syncId": "test_sync_run_id"},
+        )
+        rsps.add(
+            rsps.GET,
+            api_prefix + "syncs/test_sync_run_id",
+            json={"id": "test_sync_run_id", "status": RETLSyncStatus.RUNNING},
+        )
+        rsps.add(
+            rsps.GET,
+            api_prefix + "syncs/test_sync_run_id",
+            json={"id": "test_sync_run_id", "status": RETLSyncStatus.RUNNING},
+        )
+        rsps.add(
+            rsps.GET,
+            api_prefix + "syncs/test_sync_run_id",
+            json={"id": "test_sync_run_id", "status": RETLSyncStatus.RUNNING},
+        )
+        with pytest.raises(Failure):
+            defs.get_job_def("rs_retl_test_sync_start_and_poll_job").execute_in_process(
+                run_config=RunConfig(
+                    ops={
+                        "rudderstack_sync_op": mock_config,
+                        }
+                ))
+
 
 
 if __name__ == "__main__":

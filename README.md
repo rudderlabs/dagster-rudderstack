@@ -12,10 +12,16 @@ Setup RudderStack resource with your [workspace access token](https://www.rudder
 # resources.py
 from dagster_rudderstack.resources.rudderstack import RudderStackRETLResource
 
-
 rudderstack_retl_resource = RudderStackRETLResource(
             access_token="access_token")
 ```
+RudderStackRETLResource exposes other configurable parameters as well. Mostly default values for them would be recommended.
+* request_max_retries: The maximum number of times requests to the RudderStack API should be retried before failng.
+* request_retry_delay: Time (in seconds) to wait between each request retry.
+* request_timeout: Time (in seconds) after which the requests to RudderStack are declared timed out.
+* poll_interval: Time (in seconds) for polling status of triggered job.
+* poll_timeout: Time (in seconds) after which the polling for a triggered job is declared timed out.
+    
 ### Ops and Jobs
 
 Define ops and jobs with schedule. Provide the [connection id](https://www.rudderstack.com/docs/sources/reverse-etl/airflow-provider/#where-can-i-find-the-connection-id-for-my-reverse-etl-connection) for the sync job
@@ -40,3 +46,4 @@ rudderstack_sync_schedule = ScheduleDefinition(
     default_status=DefaultScheduleStatus.RUNNING
 )
 ```
+

@@ -1,8 +1,9 @@
+import datetime
 import logging
 import requests
 import time
 from abc import abstractmethod
-from dagster import ConfigurableResource, Failure, get_dagster_logger
+from dagster import ConfigurableResource, Failure, Noneable, get_dagster_logger
 from dagster._utils.cached_method import cached_method
 from importlib.metadata import PackageNotFoundError, version
 from pydantic import Field
@@ -48,6 +49,10 @@ class BaseRudderStackResource(ConfigurableResource):
     poll_interval: float = Field(
         default=DEFAULT_POLL_INTERVAL_SECONDS,
         description="Time (in seconds) for polling status of triggered job.",
+    )
+    poll_timeout: float = Field(
+        default=None,
+        description="Time (in seconds) after which the polling for a triggered job is declared timed out.",
     )
 
     @property
@@ -116,10 +121,6 @@ class RudderStackRETLResource(BaseRudderStackResource):
     rs_cloud_url: str = Field(
         default=DEFAULT_RUDDERSTACK_API_ENDPOINT, description="RudderStack cloud URL"
     )
-    sync_poll_interval: int = Field(
-        default=DEFAULT_POLL_INTERVAL_SECONDS,
-        description="Time (in seconds) for polling status of triggered job.",
-    )
 
     @property
     def api_base_url(self) -> str:
@@ -156,7 +157,7 @@ class RudderStackRETLResource(BaseRudderStackResource):
         )["syncId"]
 
     def poll_sync(self, conn_id: str, sync_id: str) -> Dict[str, Any]:
-        """Polls for completion of a sync.
+        """Polls for completion of a sync. If poll_timeout is set, raises Failure after timeout.
 
         Args:
             conn_id (str): connetionId for an RETL sync.
@@ -165,6 +166,7 @@ class RudderStackRETLResource(BaseRudderStackResource):
             Dict[str, Any]: Parsed json output from syncs endpoint.
         """
         status_endpoint = f"/v2/retl-connections/{conn_id}/syncs/{sync_id}"
+        poll_start = datetime.datetime.now()
         while True:
             resp = self.make_request(endpoint=status_endpoint, method="GET")
             sync_status = resp["status"]
@@ -181,7 +183,15 @@ class RudderStackRETLResource(BaseRudderStackResource):
                 raise Failure(
                     f"Sync for retl connection: {conn_id}, syncId: {sync_id} failed with error: {error_msg}"
                 )
-            time.sleep(self.sync_poll_interval)
+            if (
+                self.poll_timeout
+                and datetime.datetime.now()
+                > poll_start + datetime.timedelta(seconds=self.poll_timeout)
+            ):
+                raise Failure(
+                    f"Polling for syncId: {sync_id} for retl connection: {conn_id} timed out."
+                )
+            time.sleep(self.poll_interval)
 
     def start_and_poll(
         self, conn_id: str, sync_type: str = RETLSyncType.INCREMENTAL
