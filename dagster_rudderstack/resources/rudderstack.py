@@ -3,7 +3,7 @@ import logging
 import requests
 import time
 from abc import abstractmethod
-from dagster import ConfigurableResource, Failure, Noneable, get_dagster_logger
+from dagster import ConfigurableResource, Failure, get_dagster_logger
 from dagster._utils.cached_method import cached_method
 from importlib.metadata import PackageNotFoundError, version
 from pydantic import Field

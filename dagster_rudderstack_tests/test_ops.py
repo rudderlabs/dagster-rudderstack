@@ -87,8 +87,8 @@ def test_rudderstack_sync_job(mock_config):
             }
         )
 
+
 def test_rudderstack_sync_job_timeout(mock_config):
-    
     @job
     def rs_retl_test_sync_start_and_poll_job():
         rudderstack_sync_op()
@@ -135,9 +135,9 @@ def test_rudderstack_sync_job_timeout(mock_config):
                 run_config=RunConfig(
                     ops={
                         "rudderstack_sync_op": mock_config,
-                        }
-                ))
-
+                    }
+                )
+            )
 
 
 if __name__ == "__main__":
