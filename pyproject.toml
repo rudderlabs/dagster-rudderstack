@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dagster_rudderstack"
+version = "1.0.0"
+readme = "README.md"
+license = {file = "LICENSE"}
+description = "A Dagster library for triggering Reverse ETL syncs in RudderStack."
+dependencies = [
+    "dagster",
+    "pydantic",
+    "pytest",
+    "requests",
+    "responses",
+    "setuptools"
+]
+requires-python = ">= 3.8"
+
+[tool.setuptools.packages.find]
+exclude = ["dagster_rudderstack_tests"]
+
+[tool.dagster]
+module_name = "dagster_rudderstack"
