@@ -3,7 +3,12 @@
 A Dagster library for triggering Reverse ETL syncs in RudderStack.
 
 ### Installation
-TBD
+
+Use pip to install the library.
+
+```bash
+pip install dagster_rudderstack
+```
 
 ### Configuration
 Setup RudderStack resource with your [workspace access token](https://www.rudderstack.com/docs/dashboard-guides/personal-access-token/).
