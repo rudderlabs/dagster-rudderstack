@@ -1,6 +1,6 @@
 ## dagster_rudderstack
 
-A Dagster library for triggering Reverse ETL syncs in RudderStack.
+A Dagster library for triggering Reverse ETL syncs and Profiles runs in RudderStack.
 
 ### Installation
 
@@ -21,11 +21,21 @@ rudderstack_retl_resource = RudderStackRETLResource(
             access_token="access_token")
 ```
 RudderStackRETLResource exposes other configurable parameters as well. Mostly default values for them would be recommended.
+* rs_cloud_url: RudderStack cloud endpoint.
 * request_max_retries: The maximum number of times requests to the RudderStack API should be retried before failng.
 * request_retry_delay: Time (in seconds) to wait between each request retry.
 * request_timeout: Time (in seconds) after which the requests to RudderStack are declared timed out.
 * poll_interval: Time (in seconds) for polling status of triggered job.
 * poll_timeout: Time (in seconds) after which the polling for a triggered job is declared timed out.
+
+Similarly if need to define ops and jobs for Profiles, can define a resource for profiles.
+```python
+from dagster_rudderstack.resources.rudderstack import RudderStackProfilesResource
+
+rudderstack_profiles_resource = RudderStackProfilesResource(
+            access_token="access_token")
+
+```
     
 ### Ops and Jobs
 
@@ -52,3 +62,15 @@ rudderstack_sync_schedule = ScheduleDefinition(
 )
 ```
 
+Similarly one can define ops for profiles job. Provide the [profiles id](https://www.rudderstack.com/docs/api/profiles-api/#run-project) for the profiles project to run.
+```
+from dagster_rudderstack.ops.profiles import rudderstack_profiles_op, RudderStackProfilesOpConfig
+@job(
+    resource_defs={
+        "profiles_resource": rudderstack_profiles_resource
+    }
+)
+def rs_profiles_job():
+        rudderstack_profiles_op()
+
+```
