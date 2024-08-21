@@ -30,6 +30,7 @@ RudderStackRETLResource exposes other configurable parameters as well. Mostly de
 
 Similarly if need to define ops and jobs for Profiles, can define a resource for profiles.
 ```python
+# resources.py
 from dagster_rudderstack.resources.rudderstack import RudderStackProfilesResource
 
 rudderstack_profiles_resource = RudderStackProfilesResource(
@@ -63,8 +64,9 @@ rudderstack_sync_schedule = ScheduleDefinition(
 ```
 
 Similarly one can define ops for profiles job. Provide the [profiles id](https://www.rudderstack.com/docs/api/profiles-api/#run-project) for the profiles project to run.
-```
+```python
 from dagster_rudderstack.ops.profiles import rudderstack_profiles_op, RudderStackProfilesOpConfig
+from .resources import rudderstack_profiles_resource
 @job(
     resource_defs={
         "profiles_resource": rudderstack_profiles_resource
@@ -73,4 +75,33 @@ from dagster_rudderstack.ops.profiles import rudderstack_profiles_op, RudderStac
 def rs_profiles_job():
         rudderstack_profiles_op()
 
+```
+
+In case, one wants to define a job as sequence of ops e.g, a profile run and then reverse etl sync run. Note that, if one of the op fails, job will raise exception without running the next op. One can configure job as needed. For example, can use try/catch exception to ignore op failure and still run second op.
+```python
+from dagster_rudderstack.ops.retl import rudderstack_sync_op, RudderStackRETLOpConfig
+from dagster_rudderstack.ops.profiles import rudderstack_profiles_op, RudderStackProfilesOpConfig
+from .resources import rudderstack_retl_resource, rudderstack_profiles_resource
+
+@job(
+    resource_defs={
+        "profiles_resource": rudderstack_profiles_resource,
+        "retl_resource": rudderstack_retl_resource
+    }
+)
+def rs_profiles_then_retl_run():
+    profiles_op = rudderstack_profiles_op()
+    rudderstack_sync_op(start_after=profiles_op)
+
+rudderstack_sync_schedule = ScheduleDefinition(
+    job=rs_profiles_then_retl_run,
+    cron_schedule="0 0 * * *",  # Runs day
+    run_config=RunConfig(
+                ops={
+                    "rudderstack_profiles_op": RudderStackProfilesOpConfig(profile_id="profile_id"),
+                    "rudderstack_sync_op": RudderStackRETLOpConfig(connection_id="connection_id"),
+                }
+        )    
+    default_status=DefaultScheduleStatus.RUNNING
+)
 ```
