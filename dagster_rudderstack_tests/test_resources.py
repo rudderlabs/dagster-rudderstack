@@ -4,15 +4,26 @@ from unittest.mock import MagicMock, patch
 from dagster_rudderstack.resources.rudderstack import (
     RudderStackRETLResource,
     RETLSyncStatus,
+    RudderStackProfilesResource,
+    ProfilesRunStatus,
 )
 from dagster import Failure
 
-from dagster_rudderstack.types import RudderStackRetlOutput
+from dagster_rudderstack.types import RudderStackRetlOutput, RudderStackProfilesOutput
 
 
 @pytest.fixture
 def mock_retl_resource():
     return RudderStackRETLResource(
+        access_token="test_access_token",
+        rs_cloud_url="https://testapi.rudderstack.com",
+        poll_interval=0.1,
+    )
+
+
+@pytest.fixture
+def mock_profiles_resource():
+    return RudderStackProfilesResource(
         access_token="test_access_token",
         rs_cloud_url="https://testapi.rudderstack.com",
         poll_interval=0.1,
@@ -137,6 +148,46 @@ def test_start_and_poll(mock_request, mock_retl_resource):
     assert mock_request.call_count == 3
     assert result == RudderStackRetlOutput(
         {"id": "test_sync_run_id", "status": RETLSyncStatus.SUCCEEDED}
+    )
+
+
+@patch("requests.request")
+def test_start_profile_run(mock_request, mock_profiles_resource):
+    mock_request.return_value = MagicMock(
+        status_code=200, json=lambda: {"runId": "test_profile_run_id"}
+    )
+
+    run_id = mock_profiles_resource.start_profile_run(profile_id="test_profile_run_id")
+
+    assert run_id == "test_profile_run_id"
+    mock_request.assert_called_once()
+
+
+@patch("requests.request")
+def test_profiles_start_and_poll(mock_request, mock_profiles_resource):
+    mock_request.side_effect = [
+        MagicMock(status_code=200, json=lambda: {"runId": "test_profile_run_id"}),
+        MagicMock(
+            status_code=200,
+            json=lambda: {
+                "id": "test_profile_run_id",
+                "status": ProfilesRunStatus.RUNNING,
+            },
+        ),
+        MagicMock(
+            status_code=200,
+            json=lambda: {
+                "id": "test_profile_run_id",
+                "status": ProfilesRunStatus.FINISHED,
+            },
+        ),
+    ]
+
+    result = mock_profiles_resource.start_and_poll(profile_id="test_profiles_id")
+
+    assert mock_request.call_count == 3
+    assert result == RudderStackProfilesOutput(
+        {"id": "test_profile_run_id", "status": ProfilesRunStatus.FINISHED}
     )
 
 

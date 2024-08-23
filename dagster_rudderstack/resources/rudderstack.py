@@ -2,7 +2,6 @@ import datetime
 import logging
 import requests
 import time
-from abc import abstractmethod
 from dagster import ConfigurableResource, Failure, get_dagster_logger
 from dagster._utils.cached_method import cached_method
 from importlib.metadata import PackageNotFoundError, version
@@ -10,12 +9,18 @@ from pydantic import Field
 from typing import Any, Dict, Mapping, Optional
 from urllib.parse import urljoin
 
-from dagster_rudderstack.types import RudderStackRetlOutput
+from dagster_rudderstack.types import RudderStackRetlOutput, RudderStackProfilesOutput
 
 
 class RETLSyncStatus:
     RUNNING = "running"
     SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class ProfilesRunStatus:
+    RUNNING = "running"
+    FINISHED = "finished"
     FAILED = "failed"
 
 
@@ -32,6 +37,12 @@ DEFAULT_RUDDERSTACK_API_ENDPOINT = "https://api.rudderstack.com"
 
 
 class BaseRudderStackResource(ConfigurableResource):
+    access_token: str = Field(
+        json_schema_extra={"is_required": True}, description="Access Token"
+    )
+    rs_cloud_url: str = Field(
+        default=DEFAULT_RUDDERSTACK_API_ENDPOINT, description="RudderStack cloud URL"
+    )
     request_max_retries: int = Field(
         default=DEFAULT_REQUEST_MAX_RETRIES,
         description=(
@@ -56,14 +67,20 @@ class BaseRudderStackResource(ConfigurableResource):
     )
 
     @property
-    @abstractmethod
     def api_base_url(self) -> str:
-        raise NotImplementedError()
+        return self.rs_cloud_url
 
     @property
-    @abstractmethod
     def request_headers(self) -> Dict[str, any]:
-        raise NotImplementedError()
+        try:
+            __version__ = version("dagster_rudderstack")
+        except PackageNotFoundError:
+            __version__ = "UnknownVersion"
+        return {
+            "authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+            "User-Agent": f"RudderDagster/{__version__}",
+        }
 
     @property
     @cached_method
@@ -115,29 +132,6 @@ class BaseRudderStackResource(ConfigurableResource):
 
 
 class RudderStackRETLResource(BaseRudderStackResource):
-    access_token: str = Field(
-        json_schema_extra={"is_required": True}, description="Access Token"
-    )
-    rs_cloud_url: str = Field(
-        default=DEFAULT_RUDDERSTACK_API_ENDPOINT, description="RudderStack cloud URL"
-    )
-
-    @property
-    def api_base_url(self) -> str:
-        return self.rs_cloud_url
-
-    @property
-    def request_headers(self) -> Dict[str, any]:
-        try:
-            __version__ = version("dagster_rudderstack")
-        except PackageNotFoundError:
-            __version__ = "UnknownVersion"
-        return {
-            "authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-            "User-Agent": f"RudderDagster/{__version__}",
-        }
-
     def start_sync(
         self, conn_id: str, sync_type: str = RETLSyncType.INCREMENTAL
     ) -> str:
@@ -208,3 +202,68 @@ class RudderStackRETLResource(BaseRudderStackResource):
         sync_id = self.start_sync(conn_id, sync_type)
         sync_run_details = self.poll_sync(conn_id, sync_id)
         return RudderStackRetlOutput(sync_run_details)
+
+
+class RudderStackProfilesResource(BaseRudderStackResource):
+    def start_profile_run(self, profile_id: str):
+        """Triggers a profile run and returns runId if successful, else raises Failure.
+
+        Args:
+            profile_id (str): Profile ID
+        """
+        self._log.info(f"Triggering profile run for profile id: {profile_id}")
+        return self.make_request(
+            endpoint=f"/v2/sources/{profile_id}/start",
+        )["runId"]
+
+    def poll_profile_run(self, profile_id: str, run_id: str) -> Dict[str, Any]:
+        """Polls for completion of a profile run. If poll_timeout is set, raises Failure after timeout.
+
+        Args:
+            profile_id (str): Profile ID
+            run_id (str): Run ID
+        Returns:
+            Dict[str, Any]: Parsed json output from profile run endpoint.
+        """
+        status_endpoint = f"/v2/sources/{profile_id}/runs/{run_id}/status"
+        poll_start = datetime.datetime.now()
+        while True:
+            resp = self.make_request(endpoint=status_endpoint, method="GET")
+            run_status = resp["status"]
+            self._log.info(
+                f"Polled status for runId: {run_id} for profile: {profile_id}, status: {run_status}"
+            )
+            if run_status == ProfilesRunStatus.FINISHED:
+                self._log.info(
+                    f"Profile run finished for profile: {profile_id}, runId: {run_id}"
+                )
+                return resp
+            elif run_status == ProfilesRunStatus.FAILED:
+                error_msg = resp.get("error", None)
+                raise Failure(
+                    f"Profile run for profile: {profile_id}, runId: {run_id} failed with error: {error_msg}"
+                )
+            if (
+                self.poll_timeout
+                and datetime.datetime.now()
+                > poll_start + datetime.timedelta(seconds=self.poll_timeout)
+            ):
+                raise Failure(
+                    f"Polling for runId: {run_id} for profile: {profile_id} timed out."
+                )
+            time.sleep(self.poll_interval)
+
+    def start_and_poll(self, profile_id: str) -> Dict[str, Any]:
+        """Triggers a profile run and keeps polling till it completes.
+
+        Args:
+            profile_id (str): Profile ID
+        Returns:
+            Dict[str, Any]: Details of the profile run.
+        """
+        self._log.info(
+            f"Trigger profile run for profile: {profile_id} and wait for finish"
+        )
+        run_id = self.start_profile_run(profile_id)
+        profiles_run_details = self.poll_profile_run(profile_id, run_id)
+        return RudderStackProfilesOutput(profiles_run_details)
