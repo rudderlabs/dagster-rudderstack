@@ -77,6 +77,8 @@ def rs_profiles_job():
 
 ```
 
+RudderStackProfilesOpConfig also supports passing extra parameters that can be used for profile run via [profiles API](https://www.rudderstack.com/docs/api/profiles-api/)
+
 In case, one wants to define a job as sequence of ops e.g, a profile run and then reverse etl sync run. Note that, if one of the op fails, job will raise exception without running the next op. One can configure job as needed. For example, can use try/catch exception to ignore op failure and still run second op.
 ```python
 from dagster_rudderstack.ops.retl import rudderstack_sync_op, RudderStackRETLOpConfig
@@ -98,7 +100,7 @@ rudderstack_sync_schedule = ScheduleDefinition(
     cron_schedule="0 0 * * *",  # Runs day
     run_config=RunConfig(
                 ops={
-                    "rudderstack_profiles_op": RudderStackProfilesOpConfig(profile_id="profile_id"),
+                    "rudderstack_profiles_op": RudderStackProfilesOpConfig(profile_id="profile_id", parameters=[<add list of optional parameters>]),
                     "rudderstack_sync_op": RudderStackRETLOpConfig(connection_id="connection_id"),
                 }
         )    

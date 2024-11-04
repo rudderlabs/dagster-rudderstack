@@ -6,7 +6,7 @@ from dagster import ConfigurableResource, Failure, get_dagster_logger
 from dagster._utils.cached_method import cached_method
 from importlib.metadata import PackageNotFoundError, version
 from pydantic import Field
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional, List
 from urllib.parse import urljoin
 
 from dagster_rudderstack.types import RudderStackRetlOutput, RudderStackProfilesOutput
@@ -205,15 +205,19 @@ class RudderStackRETLResource(BaseRudderStackResource):
 
 
 class RudderStackProfilesResource(BaseRudderStackResource):
-    def start_profile_run(self, profile_id: str):
+    def start_profile_run(
+        self, profile_id: str, parameters: Optional[List[str]] = None
+    ):
         """Triggers a profile run and returns runId if successful, else raises Failure.
 
         Args:
             profile_id (str): Profile ID
+            parameters (Optional[List[str]]): Additional parameters to pass to the profiles run command
         """
         self._log.info(f"Triggering profile run for profile id: {profile_id}")
         return self.make_request(
             endpoint=f"/v2/sources/{profile_id}/start",
+            data={"parameters": parameters} if parameters else None,
         )["runId"]
 
     def poll_profile_run(self, profile_id: str, run_id: str) -> Dict[str, Any]:
@@ -253,17 +257,20 @@ class RudderStackProfilesResource(BaseRudderStackResource):
                 )
             time.sleep(self.poll_interval)
 
-    def start_and_poll(self, profile_id: str) -> Dict[str, Any]:
+    def start_and_poll(
+        self, profile_id: str, parameters: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
         """Triggers a profile run and keeps polling till it completes.
 
         Args:
             profile_id (str): Profile ID
+            parameters (Optional[List[str]]): Additional parameters to pass to the profiles run command
         Returns:
             Dict[str, Any]: Details of the profile run.
         """
         self._log.info(
             f"Trigger profile run for profile: {profile_id} and wait for finish"
         )
-        run_id = self.start_profile_run(profile_id)
+        run_id = self.start_profile_run(profile_id, parameters)
         profiles_run_details = self.poll_profile_run(profile_id, run_id)
         return RudderStackProfilesOutput(profiles_run_details)
