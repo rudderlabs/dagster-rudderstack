@@ -80,7 +80,7 @@ def test_rudderstack_profiles_op(mock_profiles_op_config):
     result = rudderstack_profiles_op(
         context, mock_profiles_op_config, profiles_resource_def
     )
-    profiles_resource.start_and_poll.assert_called_with("test_profile_id")
+    profiles_resource.start_and_poll.assert_called_with("test_profile_id", None)
     assert result == RudderStackProfilesOutput(
         {"id": "test_profiles_run_id", "status": ProfilesRunStatus.FINISHED}
     )
@@ -227,6 +227,63 @@ def test_profiles_run_job(mock_profiles_op_config, mock_profiles_resource):
             run_config=RunConfig(
                 ops={
                     "rudderstack_profiles_op": mock_profiles_op_config,
+                }
+            )
+        )
+        assert job_result.output_for_node(
+            "rudderstack_profiles_op"
+        ) == RudderStackProfilesOutput(
+            profiles_run_details={
+                "id": "test_profiles_run_id",
+                "status": ProfilesRunStatus.FINISHED,
+            }
+        )
+
+
+def test_profiles_run_with_params(mock_profiles_resource):
+    profiles_op_config = RudderStackProfilesOpConfig(
+        profile_id="test_profile_id", parameters=["--rebase_incremental"]
+    )
+
+    @op
+    def dummy_op():
+        pass
+
+    @job
+    def rs_profiles_test_start_and_poll_job():
+        rudderstack_profiles_op(start_after=dummy_op())
+
+    defs = Definitions(
+        jobs=[rs_profiles_test_start_and_poll_job],
+        resources={"profiles_resource": mock_profiles_resource},
+    )
+
+    api_prefix = "https://testapi.rudderstack.com/v2/sources/test_profile_id/"
+    with responses.RequestsMock() as rsps:
+        rsps.add(
+            rsps.POST,
+            api_prefix + "start",
+            json={"runId": "test_profiles_run_id"},
+            match=[
+                responses.json_params_matcher({"parameters": ["--rebase_incremental"]})
+            ],
+        )
+        rsps.add(
+            rsps.GET,
+            api_prefix + "runs/test_profiles_run_id/status",
+            json={"id": "test_profiles_run_id", "status": ProfilesRunStatus.RUNNING},
+        )
+        rsps.add(
+            rsps.GET,
+            api_prefix + "runs/test_profiles_run_id/status",
+            json={"id": "test_profiles_run_id", "status": ProfilesRunStatus.FINISHED},
+        )
+        job_result = defs.get_job_def(
+            "rs_profiles_test_start_and_poll_job"
+        ).execute_in_process(
+            run_config=RunConfig(
+                ops={
+                    "rudderstack_profiles_op": profiles_op_config,
                 }
             )
         )

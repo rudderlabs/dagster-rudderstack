@@ -1,6 +1,6 @@
 import pytest
 import requests
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 from dagster_rudderstack.resources.rudderstack import (
     RudderStackRETLResource,
     RETLSyncStatus,
@@ -157,10 +157,30 @@ def test_start_profile_run(mock_request, mock_profiles_resource):
         status_code=200, json=lambda: {"runId": "test_profile_run_id"}
     )
 
-    run_id = mock_profiles_resource.start_profile_run(profile_id="test_profile_run_id")
+    run_id = mock_profiles_resource.start_profile_run(profile_id="test_profile_id")
 
     assert run_id == "test_profile_run_id"
     mock_request.assert_called_once()
+
+
+@patch("requests.request")
+def test_start_profile_run_with_params(mock_request, mock_profiles_resource):
+    mock_request.return_value = MagicMock(
+        status_code=200, json=lambda: {"runId": "test_profile_run_id"}
+    )
+
+    run_id = mock_profiles_resource.start_profile_run(
+        profile_id="test_profile_id", parameters=["--rebase_incremental"]
+    )
+
+    assert run_id == "test_profile_run_id"
+    mock_request.assert_called_once_with(
+        method="POST",
+        url="https://testapi.rudderstack.com/v2/sources/test_profile_id/start",
+        json={"parameters": ["--rebase_incremental"]},
+        headers=ANY,
+        timeout=30,
+    )
 
 
 @patch("requests.request")
