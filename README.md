@@ -11,7 +11,11 @@ pip install dagster_rudderstack
 ```
 
 ### Configuration
-Setup RudderStack resource with your [workspace access token](https://www.rudderstack.com/docs/dashboard-guides/personal-access-token/).
+Setup RudderStack resource with your [service access token](https://www.rudderstack.com/docs/dashboard-guides/service-access-tokens/#generate-service-access-token).
+
+> [!NOTE]
+> For production use cases, RudderStack recommends using a service access token instead of [personal access token](https://www.rudderstack.com/docs/dashboard-guides/personal-access-token/).
+
 
 ```python
 # resources.py
